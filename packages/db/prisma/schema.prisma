@@ -1,0 +1,732 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────── Enums ───────────────────────────────
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  UNSPECIFIED
+}
+
+enum PassengerType {
+  ADULT
+  CHILD
+  INFANT
+}
+
+enum TripType {
+  ONE_WAY
+  ROUND_TRIP
+}
+
+enum CabinClass {
+  ECONOMY
+  PREMIUM_ECONOMY
+  BUSINESS
+  FIRST
+}
+
+enum BookingType {
+  FLIGHT
+  FLIGHT_HOTEL
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  TICKETED
+  CANCELLED
+  FAILED
+  REFUNDED
+}
+
+enum HotelBookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  FAILED
+}
+
+enum PaymentStatus {
+  REQUIRES_PAYMENT
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum FlightDirection {
+  OUTBOUND
+  RETURN
+}
+
+enum FlightStatus {
+  SCHEDULED
+  BOARDING
+  DEPARTED
+  EN_ROUTE
+  LANDED
+  DELAYED
+  CANCELLED
+  DIVERTED
+  UNKNOWN
+}
+
+enum FlightStatusEventKind {
+  DELAY
+  ETA_CHANGE
+  CANCELLATION
+  GATE_CHANGE
+  TERMINAL_CHANGE
+  DEPARTED
+  LANDED
+  DIVERTED
+}
+
+enum NotificationChannel {
+  EMAIL
+  PUSH
+  IN_APP
+}
+
+enum NotificationType {
+  BOOKING_CONFIRMATION
+  BOOKING_CANCELLED
+  PAYMENT_FAILED
+  PRICE_DROP
+  FLIGHT_DELAYED
+  FLIGHT_CANCELLED
+  FLIGHT_LANDED
+  FLIGHT_DEPARTED
+  FLIGHT_GATE_CHANGE
+  SCHEDULE_CHANGE
+  CHECKIN_REMINDER
+  ACCOUNT
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+  BOUNCED
+  SUPPRESSED
+}
+
+enum SuppressionReason {
+  BOUNCE
+  COMPLAINT
+  UNSUBSCRIBE_ALL
+  MANUAL
+}
+
+// ───────────────────────────── Identity ──────────────────────────────
+
+model User {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  email          String    @unique // stored lower-cased by the app
+  name           String?
+  image          String?
+  phone          String?
+  role           UserRole  @default(USER)
+  locale         String    @default("en")
+  currency       String    @default("USD") @db.Char(3)
+  timezone       String    @default("UTC")
+  emailVerified  DateTime? @db.Timestamptz(3)
+  marketingOptIn Boolean   @default(false)
+  deletedAt      DateTime? @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+
+  accounts            Account[]
+  sessions            Session[]
+  passengers          Passenger[]
+  preferences         NotificationPreference?
+  bookings            Booking[]
+  searchRequests      SearchRequest[]
+  priceWatches        PriceWatch[]
+  flightSubscriptions FlightSubscription[]
+  notifications       Notification[]
+  savedHotels         SavedHotel[]
+
+  @@index([deletedAt])
+  @@map("users")
+}
+
+// Auth.js (Prisma adapter) tables
+model Account {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  userId            String   @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?  @db.Text
+  access_token      String?  @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?  @db.Text
+  session_state     String?
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  sessionToken String   @unique
+  userId       String   @db.Uuid
+  expires      DateTime @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expires])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  identifier String
+  token      String   @unique
+  expires    DateTime @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Passenger {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  userId            String    @db.Uuid
+  firstName         String
+  lastName          String
+  dateOfBirth       DateTime  @db.Date
+  gender            Gender    @default(UNSPECIFIED)
+  nationality       String?   @db.Char(2)
+  passportNumberEnc String? // envelope-encrypted ciphertext, never plaintext
+  passportExpiry    DateTime? @db.Date
+  passportCountry   String?   @db.Char(2)
+  deletedAt         DateTime? @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookingPassengers BookingPassenger[]
+
+  @@index([userId, deletedAt])
+  @@map("passengers")
+}
+
+model NotificationPreference {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  userId          String   @unique @db.Uuid
+  bookingEmail    Boolean  @default(true)
+  priceAlerts     Boolean  @default(true)
+  flightStatus    Boolean  @default(true)
+  pushEnabled     Boolean  @default(false)
+  quietHoursStart Int? // minutes from local midnight, 0–1439
+  quietHoursEnd   Int?
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+// ───────────────────────── Reference data ────────────────────────────
+
+model Airline {
+  iata      String   @id @db.Char(2)
+  icao      String?  @unique @db.Char(3)
+  name      String
+  logoUrl   String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  segments  FlightSegment[]
+  instances FlightInstance[]
+
+  @@map("airlines")
+}
+
+model Airport {
+  iata        String   @id @db.Char(3)
+  icao        String?  @unique @db.Char(4)
+  name        String
+  city        String
+  countryCode String   @db.Char(2)
+  latitude    Float
+  longitude   Float
+  timezone    String
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  segmentsFrom  FlightSegment[]  @relation("SegmentOrigin")
+  segmentsTo    FlightSegment[]  @relation("SegmentDestination")
+  instancesFrom FlightInstance[] @relation("InstanceOrigin")
+  instancesTo   FlightInstance[] @relation("InstanceDestination")
+
+  @@index([city])
+  @@index([countryCode])
+  @@map("airports")
+}
+
+// ──────────────────────── Search & pricing ───────────────────────────
+
+model SearchRequest {
+  id          String     @id @default(uuid(7)) @db.Uuid
+  userId      String?    @db.Uuid
+  tripType    TripType
+  origin      String     @db.Char(3)
+  destination String     @db.Char(3)
+  departDate  DateTime   @db.Date
+  returnDate  DateTime?  @db.Date
+  adults      Int        @default(1)
+  children    Int        @default(0)
+  infants     Int        @default(0)
+  cabin       CabinClass @default(ECONOMY)
+  resultCount Int?
+  createdAt   DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([origin, destination, departDate])
+  @@map("search_requests")
+}
+
+model PriceSnapshot {
+  id          BigInt     @id @default(autoincrement())
+  routeKey    String // e.g. "JFK-LHR:RT:ECONOMY"
+  origin      String     @db.Char(3)
+  destination String     @db.Char(3)
+  departDate  DateTime   @db.Date
+  returnDate  DateTime?  @db.Date
+  cabin       CabinClass
+  lowestMinor BigInt
+  currency    String     @db.Char(3)
+  provider    String     @db.VarChar(32)
+  capturedAt  DateTime   @default(now()) @db.Timestamptz(3)
+  createdAt   DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @db.Timestamptz(3)
+
+  @@index([routeKey, departDate, capturedAt(sort: Desc)])
+  @@index([capturedAt])
+  @@map("price_snapshots")
+}
+
+// ───────────────────────────── Bookings ──────────────────────────────
+
+model Booking {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  reference      String        @unique @db.VarChar(12) // e.g. FH-8K2Q9X
+  userId         String        @db.Uuid
+  type           BookingType
+  status         BookingStatus @default(PENDING)
+  totalMinor     BigInt
+  currency       String        @db.Char(3)
+  contactEmail   String
+  contactPhone   String?
+  idempotencyKey String        @unique
+  expiresAt      DateTime?     @db.Timestamptz(3) // payment hold deadline
+  cancelledAt    DateTime?     @db.Timestamptz(3)
+  deletedAt      DateTime?     @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
+
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  flights       BookingFlight[]
+  hotels        BookingHotel[]
+  passengers    BookingPassenger[]
+  payments      Payment[]
+  events        BookingEvent[]
+  subscriptions FlightSubscription[]
+  notifications Notification[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, status])
+  @@index([status, expiresAt])
+  @@index([deletedAt])
+  @@map("bookings")
+}
+
+model BookingFlight {
+  id              String          @id @default(uuid(7)) @db.Uuid
+  bookingId       String          @db.Uuid
+  provider        String          @db.VarChar(32)
+  providerOrderId String
+  pnr             String?
+  direction       FlightDirection
+  totalMinor      BigInt
+  currency        String          @db.Char(3)
+  fareRules       Json?
+  raw             Json?
+  ticketedAt      DateTime?       @db.Timestamptz(3)
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(3)
+
+  booking  Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  segments FlightSegment[]
+
+  @@unique([provider, providerOrderId, direction])
+  @@index([bookingId])
+  @@index([pnr])
+  @@map("booking_flights")
+}
+
+model FlightSegment {
+  id               String     @id @default(uuid(7)) @db.Uuid
+  bookingFlightId  String     @db.Uuid
+  seq              Int
+  airlineIata      String     @db.Char(2)
+  flightNumber     String // numeric part only, e.g. "100"
+  originIata       String     @db.Char(3)
+  destinationIata  String     @db.Char(3)
+  departAt         DateTime   @db.Timestamptz(3) // UTC
+  arriveAt         DateTime   @db.Timestamptz(3) // UTC
+  aircraft         String?
+  cabin            CabinClass
+  flightInstanceId String?    @db.Uuid
+  createdAt        DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime   @updatedAt @db.Timestamptz(3)
+
+  bookingFlight  BookingFlight   @relation(fields: [bookingFlightId], references: [id], onDelete: Cascade)
+  airline        Airline         @relation(fields: [airlineIata], references: [iata], onDelete: Restrict)
+  origin         Airport         @relation("SegmentOrigin", fields: [originIata], references: [iata], onDelete: Restrict)
+  destination    Airport         @relation("SegmentDestination", fields: [destinationIata], references: [iata], onDelete: Restrict)
+  flightInstance FlightInstance? @relation(fields: [flightInstanceId], references: [id], onDelete: SetNull)
+
+  @@unique([bookingFlightId, seq])
+  @@index([airlineIata, flightNumber, departAt])
+  @@index([flightInstanceId])
+  @@index([originIata, departAt])
+  @@map("flight_segments")
+}
+
+model BookingPassenger {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  bookingId    String        @db.Uuid
+  passengerId  String?       @db.Uuid
+  type         PassengerType @default(ADULT)
+  snapshot     Json // immutable copy of traveller details at booking time
+  ticketNumber String?
+  seat         String?
+  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
+
+  booking   Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  passenger Passenger? @relation(fields: [passengerId], references: [id], onDelete: SetNull)
+
+  @@index([bookingId])
+  @@index([passengerId])
+  @@map("booking_passengers")
+}
+
+model BookingHotel {
+  id                    String             @id @default(uuid(7)) @db.Uuid
+  bookingId             String             @db.Uuid
+  provider              String             @db.VarChar(32)
+  providerBookingId     String?
+  hotelId               String
+  hotelName             String
+  address               String?
+  latitude              Float?
+  longitude             Float?
+  checkIn               DateTime           @db.Date
+  checkOut              DateTime           @db.Date
+  rooms                 Int                @default(1)
+  guests                Int                @default(1)
+  roomType              String?
+  totalMinor            BigInt
+  currency              String             @db.Char(3)
+  cancellationPolicy    Json?
+  freeCancellationUntil DateTime?          @db.Timestamptz(3)
+  status                HotelBookingStatus @default(PENDING)
+  raw                   Json?
+  createdAt             DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime           @updatedAt @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@index([checkIn])
+  @@index([provider, providerBookingId])
+  @@map("booking_hotels")
+}
+
+model Payment {
+  id                    String        @id @default(uuid(7)) @db.Uuid
+  bookingId             String        @db.Uuid
+  stripePaymentIntentId String        @unique
+  status                PaymentStatus @default(REQUIRES_PAYMENT)
+  amountMinor           BigInt
+  currency              String        @db.Char(3)
+  refundedMinor         BigInt        @default(0)
+  failureCode           String?
+  createdAt             DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime      @updatedAt @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([bookingId])
+  @@index([status, createdAt])
+  @@map("payments")
+}
+
+model BookingEvent {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  bookingId String   @db.Uuid
+  type      String
+  payload   Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId, createdAt])
+  @@map("booking_events")
+}
+
+// ───────────────────────────── Tracking ──────────────────────────────
+
+model FlightInstance {
+  id                String       @id @default(uuid(7)) @db.Uuid
+  airlineIata       String       @db.Char(2)
+  flightNumber      String
+  originIata        String       @db.Char(3)
+  destinationIata   String       @db.Char(3)
+  scheduledDepartAt DateTime     @db.Timestamptz(3)
+  scheduledArriveAt DateTime     @db.Timestamptz(3)
+  status            FlightStatus @default(SCHEDULED)
+  estimatedDepartAt DateTime?    @db.Timestamptz(3)
+  estimatedArriveAt DateTime?    @db.Timestamptz(3)
+  actualDepartAt    DateTime?    @db.Timestamptz(3)
+  actualArriveAt    DateTime?    @db.Timestamptz(3)
+  delayMinutes      Int?
+  depTerminal       String?
+  depGate           String?
+  arrTerminal       String?
+  arrGate           String?
+  baggageBelt       String?
+  providerRef       String?
+  lastPolledAt      DateTime?    @db.Timestamptz(3)
+  nextPollAt        DateTime?    @db.Timestamptz(3)
+  createdAt         DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @db.Timestamptz(3)
+
+  airline       Airline              @relation(fields: [airlineIata], references: [iata], onDelete: Restrict)
+  origin        Airport              @relation("InstanceOrigin", fields: [originIata], references: [iata], onDelete: Restrict)
+  destination   Airport              @relation("InstanceDestination", fields: [destinationIata], references: [iata], onDelete: Restrict)
+  positions     FlightPosition[]
+  events        FlightStatusEvent[]
+  segments      FlightSegment[]
+  subscriptions FlightSubscription[]
+
+  @@unique([airlineIata, flightNumber, scheduledDepartAt])
+  @@index([status, scheduledDepartAt])
+  @@index([nextPollAt])
+  @@index([originIata, scheduledDepartAt])
+  @@map("flight_instances")
+}
+
+model FlightPosition {
+  id               BigInt   @id @default(autoincrement())
+  flightInstanceId String   @db.Uuid
+  latitude         Float
+  longitude        Float
+  altitudeFt       Int?
+  speedKts         Int?
+  headingDeg       Int?
+  onGround         Boolean  @default(false)
+  recordedAt       DateTime @db.Timestamptz(3)
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  flightInstance FlightInstance @relation(fields: [flightInstanceId], references: [id], onDelete: Cascade)
+
+  @@index([flightInstanceId, recordedAt(sort: Desc)])
+  @@index([recordedAt])
+  @@map("flight_positions")
+}
+
+model FlightStatusEvent {
+  id               String                @id @default(uuid(7)) @db.Uuid
+  flightInstanceId String                @db.Uuid
+  kind             FlightStatusEventKind
+  oldValue         Json?
+  newValue         Json?
+  detectedAt       DateTime              @default(now()) @db.Timestamptz(3)
+  fannedOutAt      DateTime?             @db.Timestamptz(3) // set once notifications were enqueued
+  createdAt        DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime              @updatedAt @db.Timestamptz(3)
+
+  flightInstance FlightInstance @relation(fields: [flightInstanceId], references: [id], onDelete: Cascade)
+
+  @@index([flightInstanceId, detectedAt])
+  @@index([fannedOutAt, detectedAt])
+  @@map("flight_status_events")
+}
+
+// ───────────────────── Watches & notifications ───────────────────────
+
+model PriceWatch {
+  id                String     @id @default(uuid(7)) @db.Uuid
+  userId            String     @db.Uuid
+  tripType          TripType
+  origin            String     @db.Char(3)
+  destination       String     @db.Char(3)
+  departDate        DateTime   @db.Date
+  returnDate        DateTime?  @db.Date
+  cabin             CabinClass @default(ECONOMY)
+  adults            Int        @default(1)
+  children          Int        @default(0)
+  currency          String     @db.Char(3)
+  targetPriceMinor  BigInt?
+  dropPercent       Decimal?   @db.Decimal(5, 2)
+  baselineMinor     BigInt?
+  lastSeenMinor     BigInt?
+  lastNotifiedMinor BigInt?
+  lastCheckedAt     DateTime?  @db.Timestamptz(3)
+  nextCheckAt       DateTime?  @db.Timestamptz(3)
+  active            Boolean    @default(true)
+  expiresAt         DateTime   @db.Timestamptz(3)
+  deletedAt         DateTime?  @db.Timestamptz(3)
+  createdAt         DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime   @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+  @@index([active, nextCheckAt])
+  @@index([origin, destination, departDate])
+  @@map("price_watches")
+}
+
+model FlightSubscription {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  userId           String   @db.Uuid
+  flightInstanceId String   @db.Uuid
+  bookingId        String?  @db.Uuid
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  flightInstance FlightInstance @relation(fields: [flightInstanceId], references: [id], onDelete: Cascade)
+  booking        Booking?       @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, flightInstanceId])
+  @@index([flightInstanceId])
+  @@index([bookingId])
+  @@map("flight_subscriptions")
+}
+
+model Notification {
+  id                String              @id @default(uuid(7)) @db.Uuid
+  userId            String              @db.Uuid
+  bookingId         String?             @db.Uuid
+  channel           NotificationChannel
+  type              NotificationType
+  dedupeKey         String              @unique // include userId + channel, e.g. "u1:EMAIL:gate:{fi}:{gate}"
+  payload           Json
+  status            NotificationStatus  @default(QUEUED)
+  providerMessageId String?
+  error             String?
+  sentAt            DateTime?           @db.Timestamptz(3)
+  readAt            DateTime?           @db.Timestamptz(3)
+  createdAt         DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime            @updatedAt @db.Timestamptz(3)
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt])
+  @@index([status, createdAt])
+  @@index([providerMessageId])
+  @@map("notifications")
+}
+
+model EmailSuppression {
+  id        String            @id @default(uuid(7)) @db.Uuid
+  email     String            @unique
+  reason    SuppressionReason
+  createdAt DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime          @updatedAt @db.Timestamptz(3)
+
+  @@map("email_suppressions")
+}
+
+// ───────────────────────────── Misc ──────────────────────────────────
+
+model SavedHotel {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @db.Uuid
+  provider  String    @db.VarChar(32)
+  hotelId   String
+  hotelName String
+  cityName  String?
+  latitude  Float?
+  longitude Float?
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, hotelId])
+  @@map("saved_hotels")
+}
+
+model ProcessedWebhookEvent {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  source      String   @db.VarChar(32) // stripe | duffel | resend
+  eventId     String
+  processedAt DateTime @default(now()) @db.Timestamptz(3)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([source, eventId])
+  @@index([processedAt])
+  @@map("processed_webhook_events")
+}
+
+model ApiAuditLog {
+  id         BigInt   @id @default(autoincrement())
+  provider   String   @db.VarChar(32)
+  endpoint   String
+  statusCode Int?
+  durationMs Int
+  costMicros Int? // vendor cost in millionths of a USD, for budget tracking
+  cacheHit   Boolean  @default(false)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([provider, createdAt])
+  @@map("api_audit_logs")
+}

@@ -1,0 +1,15 @@
+{
+  "name": "flight-hotel",
+  "private": true,
+  "packageManager": "pnpm@12.16.1",
+  "scripts": {
+    "dev": "pnpm --filter @fh/web dev",
+    "worker": "pnpm --filter @fh/worker dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @fh/db generate",
+    "db:migrate": "pnpm --filter @fh/db migrate",
+    "db:studio": "pnpm --filter @fh/db studio"
+  },
+  "engines": { "node": ">=20" }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@fh/providers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./flights": "./src/flights/index.ts",
+    "./hotels": "./src/hotels/index.ts",
+    "./tracking": "./src/tracking/index.ts",
+    "./errors": "./src/errors.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fh/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.7.0"
+  }
+}
