@@ -3,10 +3,11 @@ import Redis from "ioredis";
 // Redis when REDIS_URL is set, otherwise a bounded in-memory Map (dev / single instance).
 // Every operation fails open: a cache outage must degrade latency, never availability.
 
-const memory = new Map<string, { value: string; expiresAt: number }>();
 const MAX_MEMORY_KEYS = 1000;
 
-const g = globalThis as unknown as { __redis?: Redis | null };
+// On globalThis so every route bundle / HMR reload in the same process shares one fallback store.
+const g = globalThis as unknown as { __redis?: Redis | null; __memCache?: Map<string, { value: string; expiresAt: number }> };
+const memory = (g.__memCache ??= new Map());
 
 /** Shared Redis connection (null when REDIS_URL is unset). Survives Next dev HMR. */
 export function getRedis(): Redis | null {

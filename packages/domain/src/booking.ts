@@ -34,16 +34,18 @@ export const passengerInputSchema = z.object({
 });
 export type PassengerInput = z.infer<typeof passengerInputSchema>;
 
+export const contactSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email").max(254),
+  phone: z.string().trim().regex(/^\+[1-9]\d{6,14}$/, "Use international format, e.g. +14155550123"),
+});
+
 export const createBookingSchema = z
   .object({
     idempotencyKey: z.string().uuid(),
     flightOfferId: z.string().min(1),
     hotelOfferId: z.string().min(1).optional(),
     passengers: z.array(passengerInputSchema).min(1).max(9),
-    contact: z.object({
-      email: z.string().trim().toLowerCase().email().max(254),
-      phone: z.string().regex(/^\+[1-9]\d{6,14}$/, "Use international format, e.g. +14155550123"),
-    }),
+    contact: contactSchema,
     // The total the user saw; the server rejects the booking if the offers no longer add up to it.
     expectedTotal: z.object({ amountMinor: minorUnits, currency }),
     acceptedTerms: z.literal(true, { errorMap: () => ({ message: "You must accept the terms" }) }),

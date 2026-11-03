@@ -117,3 +117,20 @@ export function bearing(a: { lat: number; lon: number }, b: { lat: number; lon: 
   const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lon - a.lon) * r);
   return (Math.atan2(y, x) / r + 360) % 360;
 }
+
+/** n+1 points along the great circle from a to b (spherical interpolation), for drawing flight paths. */
+export function greatCircle(a: { lat: number; lon: number }, b: { lat: number; lon: number }, n = 64): { lat: number; lon: number }[] {
+  const r = Math.PI / 180;
+  const [la1, lo1, la2, lo2] = [a.lat * r, a.lon * r, b.lat * r, b.lon * r];
+  const d = 2 * Math.asin(Math.sqrt(Math.sin((la2 - la1) / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin((lo2 - lo1) / 2) ** 2));
+  if (d === 0) return [a];
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const f = i / n;
+    const A = Math.sin((1 - f) * d) / Math.sin(d);
+    const B = Math.sin(f * d) / Math.sin(d);
+    const x = A * Math.cos(la1) * Math.cos(lo1) + B * Math.cos(la2) * Math.cos(lo2);
+    const y = A * Math.cos(la1) * Math.sin(lo1) + B * Math.cos(la2) * Math.sin(lo2);
+    const z = A * Math.sin(la1) + B * Math.sin(la2);
+    return { lat: Math.atan2(z, Math.sqrt(x * x + y * y)) / r, lon: Math.atan2(y, x) / r };
+  });
+}

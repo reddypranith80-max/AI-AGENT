@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { HotelOffer, HotelSearchInput, HotelSearchResponse } from "@fh/domain/hotels";
 import { nightsOf } from "@fh/domain/hotels";
-import { AmadeusHotelProvider, geocodeCity, type HotelProvider, type HotelProviderParams } from "@fh/providers/hotels";
+import { AmadeusHotelProvider, MockHotelProvider, geocodeCity, type HotelProvider, type HotelProviderParams } from "@fh/providers/hotels";
 import { cacheGet, cacheSet } from "./cache";
 
 const RESULT_TTL_SEC = Number(process.env.HOTEL_CACHE_TTL_SEC ?? 600); // 10 min
@@ -16,7 +16,12 @@ const DEFAULT_MIN_STARS = 3;
 type CachedSearch = { offers: HotelOffer[]; fetchedAt: string; currency: string; nights: number };
 
 let provider: HotelProvider | undefined;
-const getProvider = () => (provider ??= AmadeusHotelProvider.fromEnv()); // swap to Booking.com / Expedia here
+const getProvider = () => {
+  if (provider) return provider;
+  const mock = process.env.HOTEL_PROVIDER === "mock" || (!process.env.AMADEUS_CLIENT_ID && process.env.HOTEL_PROVIDER !== "amadeus");
+  if (mock) console.warn("[hotels] using the MOCK provider (set AMADEUS_CLIENT_ID/SECRET for live rates)");
+  return (provider = mock ? new MockHotelProvider() : AmadeusHotelProvider.fromEnv()); // swap to Booking.com / Expedia here
+};
 
 const inflight = new Map<string, Promise<CachedSearch>>();
 function coalesce(key: string, fn: () => Promise<CachedSearch>) {
@@ -57,7 +62,7 @@ async function enrichRatings(offers: HotelOffer[]) {
   targets.forEach((o, i) => {
     const c = cached[i];
     if (c === null) missing.push(o.hotelId);
-    else o.rating = c >= 0 ? c : null; // -1 = known to have no rating
+    else if (c >= 0) o.rating = c; // -1 = known to have no rating: keep whatever the provider returned
   });
   if (missing.length === 0) return;
 

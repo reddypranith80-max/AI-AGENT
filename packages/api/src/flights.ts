@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { sortOffers, type FlightOffer, type FlightSearchInput, type FlightSearchResponse } from "@fh/domain/flights";
-import { AmadeusProvider, ProviderError, type FlightProvider } from "@fh/providers/flights";
+import { AmadeusProvider, MockFlightProvider, ProviderError, type FlightProvider } from "@fh/providers/flights";
 import { cacheGet, cacheSet } from "./cache";
 import { rateLimit } from "./rate-limit";
 
@@ -13,7 +13,13 @@ const DEFAULT_CURRENCY = process.env.DEFAULT_CURRENCY ?? "USD";
 type CachedSearch = { offers: FlightOffer[]; fetchedAt: string; currency: string };
 
 let provider: FlightProvider | undefined;
-const getProvider = () => (provider ??= AmadeusProvider.fromEnv()); // swap to Duffel here
+/** Amadeus when credentials exist (or FLIGHT_PROVIDER=amadeus); otherwise the keyless mock so the app runs out of the box. */
+const getProvider = () => {
+  if (provider) return provider;
+  const mock = process.env.FLIGHT_PROVIDER === "mock" || (!process.env.AMADEUS_CLIENT_ID && process.env.FLIGHT_PROVIDER !== "amadeus");
+  if (mock) console.warn("[flights] using the MOCK provider (set AMADEUS_CLIENT_ID/SECRET for live fares)");
+  return (provider = mock ? new MockFlightProvider() : AmadeusProvider.fromEnv()); // swap to Duffel here
+};
 
 // Concurrent identical searches in this process share one provider call.
 const inflight = new Map<string, Promise<CachedSearch>>();

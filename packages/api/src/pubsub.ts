@@ -7,7 +7,8 @@ import { getRedis } from "./cache";
  * Redis when available (cross-process); an in-process emitter otherwise (single-process dev only).
  */
 
-const local = new EventEmitter();
+const g0 = globalThis as unknown as { __localBus?: EventEmitter };
+const local = (g0.__localBus ??= new EventEmitter());
 local.setMaxListeners(0);
 
 type Handler = (message: string) => void;
