@@ -74,3 +74,48 @@ export type BookingResult = {
   currency: string;
   type: "FLIGHT" | "FLIGHT_HOTEL";
 };
+
+// ───────────────────────────── Trip read models ─────────────────────────────
+
+export type TripSegmentDto = {
+  id: string;
+  flightNumber: string; // "BA100"
+  airlineIata: string;
+  airlineName: string;
+  from: { iata: string; city: string; timezone: string };
+  to: { iata: string; city: string; timezone: string };
+  departAt: string; // UTC ISO
+  arriveAt: string;
+  cabin: string;
+  flightInstanceId: string | null;
+  flightStatus: string | null;
+};
+
+export type TripDto = {
+  id: string;
+  reference: string;
+  status: BookingResult["status"];
+  type: BookingResult["type"];
+  total: { amountMinor: number; currency: string };
+  createdAt: string;
+  contactEmail: string;
+  flights: { direction: "OUTBOUND" | "RETURN"; pnr: string | null; segments: TripSegmentDto[] }[];
+  hotel: {
+    id: string;
+    name: string;
+    address: string | null;
+    checkIn: string; // YYYY-MM-DD
+    checkOut: string;
+    nights: number;
+    roomType: string | null;
+    rooms: number;
+    guests: number;
+    status: string;
+    freeCancellationUntil: string | null;
+    latitude: number | null;
+    longitude: number | null;
+  } | null;
+  passengers: { name: string; type: string; ticketNumber: string | null }[];
+  departsAt: string; // first segment, UTC ISO
+  arrivesAt: string; // last segment, UTC ISO
+};
