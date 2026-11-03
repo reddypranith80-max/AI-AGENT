@@ -65,7 +65,7 @@ A full-stack travel platform: real-time flight and hotel search, combined bookin
 **Requirements:** Node 20+, [pnpm](https://pnpm.io), PostgreSQL 16 (Redis optional in dev).
 
 ```bash
-git clone <this-repo> && cd <this-repo>
+git clone https://github.com/reddypranith80-max/AI-AGENT.git && cd AI-AGENT
 pnpm install
 
 cp .env.example .env          # set AUTH_SECRET:  openssl rand -base64 32
